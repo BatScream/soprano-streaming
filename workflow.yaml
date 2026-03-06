@@ -1,0 +1,94 @@
+name: greeting_bot
+description: A simple greeting chatbot that collects the user's name and favorite color
+version: "1.0"
+
+data:
+  - name: user_name
+    type: text
+    description: The user's name
+  - name: available_colors
+    type: list
+    description: Static list of available colors
+  - name: favorite_color
+    type: text
+    description: The user's favorite color
+  - name: color_recommendation
+    type: text
+    description: LLM-generated recommendation about the chosen color
+  - name: greeting_result
+    type: text
+    description: The final greeting result
+
+steps:
+  - id: collect_name
+    action: collect_input_with_agent
+    field: user_name
+    max_attempts: 3
+    agent:
+      name: NameCollector
+      instructions: |
+        You are a friendly greeter bot. Your job is to collect the user's name.
+        Ask the user for their name in a warm, welcoming way.
+
+        When the user provides their name, respond with exactly:
+        user_name_CAPTURED: <the name>
+
+        If the user refuses or the input is not a valid name, respond with exactly:
+        user_name_FAILED:
+
+        Do not include any other text after the CAPTURED/FAILED markers on that line.
+    transitions:
+      - pattern: "user_name_CAPTURED:"
+        next: suggest_colors
+      - pattern: "user_name_FAILED:"
+        next: failure_outcome
+
+  - id: suggest_colors
+    action: call_function
+    function: functions.suggest_colors
+    output: available_colors
+    next: collect_color
+
+  - id: collect_color
+    action: collect_input_with_agent
+    field: favorite_color
+    max_attempts: 3
+    agent:
+      name: ColorCollector
+      instructions: |
+        You are a friendly greeter bot. You already know the user's name.
+        The user has been shown a list of available colors.
+        Now ask them to pick their favorite color from the list, or name any other color.
+
+        When the user provides a color, respond with exactly:
+        favorite_color_CAPTURED: <the color>
+
+        If the user refuses or the input is not a valid color, respond with exactly:
+        favorite_color_FAILED:
+
+        Do not include any other text after the CAPTURED/FAILED markers on that line.
+    transitions:
+      - pattern: "favorite_color_CAPTURED:"
+        next: generate_recommendation
+      - pattern: "favorite_color_FAILED:"
+        next: failure_outcome
+
+  - id: generate_recommendation
+    action: call_function
+    function: functions.generate_color_recommendation
+    output: color_recommendation
+    next: build_greeting
+
+  - id: build_greeting
+    action: call_function
+    function: functions.build_greeting
+    output: greeting_result
+    next: success_outcome
+
+outcomes:
+  - id: success_outcome
+    type: success
+    message: "{{ greeting_result }}"
+  - id: failure_outcome
+    type: failure
+    message: "Sorry, I couldn't complete the greeting. Please try again later."
